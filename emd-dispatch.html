@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EMD Dispatch Tool</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(120deg, #e3f2fd, #ffffff);
+      padding: 40px;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #0d47a1;
+      margin-bottom: 30px;
+    }
+    select, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 15px;
+      border: 1px solid #90caf9;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+    .question {
+      margin-top: 20px;
+      background: #f1f8ff;
+      padding: 15px;
+      border-left: 5px solid #42a5f5;
+      border-radius: 5px;
+    }
+    .question p {
+      font-weight: bold;
+    }
+    .option {
+      margin-top: 5px;
+    }
+    .responder {
+      margin-top: 25px;
+      padding: 15px;
+      border-left: 5px solid #4caf50;
+      background: #e8f5e9;
+      font-weight: bold;
+    }
+    .severity {
+      margin-top: 10px;
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+    .non-urgent { color: green; }
+    .urgent { color: orange; }
+    .critical { color: red; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚑 EMD Dispatch Screening Tool</h1>
+
+    <label for="complaint">Select Chief Complaint:</label>
+    <select id="complaint" onchange="loadQuestions()">
+      <option value="">-- Choose an Emergency Type --</option>
+    </select>
+
+    <div id="questions"></div>
+    <div id="responder" class="responder" style="display:none;"></div>
+    <div id="severity" class="severity" style="display:none;"></div>
+  </div>
+
+  <script>
+    const complaints = {
+      "Cardiac Arrest": {
+        questions: [
+          "Is the patient conscious?",
+          "Is the patient breathing normally?"
+        ],
+        responders: "🚑 ALS Ambulance + 🚒 Fire + 🚓 Police",
+        severityWeights: [5, 5],
+        scoreIfYes: [false, false]  // "No" means danger
+      },
+      "Chest Pain": {
+        questions: [
+          "Does the pain spread to the arms or jaw?",
+          "History of heart problems?"
+        ],
+        responders: "🚑 ALS Ambulance",
+        severityWeights: [3, 2],
+        scoreIfYes: [true, true]  // "Yes" means danger
+      },
+      "Stroke": {
+        questions: [
+          "Is the smile equal on both sides?",
+          "Can the patient raise both arms?",
+          "Is speech clear?"
+        ],
+        responders: "🚑 ALS Ambulance (Stroke Alert)",
+        severityWeights: [5, 5, 5],
+        scoreIfYes: [false, false, false]  // "No" means danger
+      },
+      "Breathing Difficulty": {
+        questions: [
+          "Can the patient speak in full sentences?",
+          "Using inhaler or oxygen?"
+        ],
+        responders: "🚑 ALS Ambulance",
+        severityWeights: [3, 2],
+        scoreIfYes: [false, true]
+      },
+      "Trauma / Bleeding": {
+        questions: [
+          "Is the bleeding controlled?",
+          "Is the patient alert?"
+        ],
+        responders: "🚑 ALS Ambulance + 🚒 Fire + 🚓 Police",
+        severityWeights: [4, 2],
+        scoreIfYes: [false, false]
+      },
+      "Overdose / Poisoning": {
+        questions: [
+          "What substance was taken?",
+          "Is the patient conscious or breathing?"
+        ],
+        responders: "🚑 ALS Ambulance + 🚓 Police",
+        severityWeights: [2, 5],
+        scoreIfYes: [true, false]
+      }
+    };
+
+    const select = document.getElementById("complaint");
+    for (let key in complaints) {
+      const option = document.createElement("option");
+      option.value = key;
+      option.innerText = key;
+      select.appendChild(option);
+    }
+
+    function loadQuestions() {
+      const selected = select.value;
+      const container = document.getElementById("questions");
+      const responderDiv = document.getElementById("responder");
+      const severityDiv = document.getElementById("severity");
+      container.innerHTML = "";
+      responderDiv.style.display = "none";
+      severityDiv.style.display = "none";
+
+      if (!selected) return;
+
+      const { questions } = complaints[selected];
+
+      questions.forEach((q, i) => {
+        const div = document.createElement("div");
+        div.className = "question";
+        div.innerHTML = `
+          <p>${q}</p>
+          <div class="option"><input type="radio" name="q${i}" value="yes" /> Yes</div>
+          <div class="option"><input type="radio" name="q${i}" value="no" /> No</div>
+        `;
+        container.appendChild(div);
+      });
+
+      const submitBtn = document.createElement("button");
+      submitBtn.innerText = "Get Dispatch & Severity";
+      submitBtn.onclick = () => {
+        const { responders, severityWeights, scoreIfYes } = complaints[selected];
+        let totalScore = 0;
+        let answered = 0;
+
+        questions.forEach((_, i) => {
+          const radios = document.getElementsByName(`q${i}`);
+          for (const radio of radios) {
+            if (radio.checked) {
+              const dangerousAnswer = scoreIfYes[i] ? "yes" : "no";
+              if (radio.value === dangerousAnswer) {
+                totalScore += severityWeights[i];
+              }
+              answered++;
+            }
+          }
+        });
+
+        if (answered < questions.length) {
+          alert("Please answer all questions.");
+          return;
+        }
+
+        let level = "";
+        let cssClass = "";
+
+        if (totalScore <= 2) {
+          level = "🟢 Non-Urgent";
+          cssClass = "non-urgent";
+        } else if (totalScore <= 5) {
+          level = "🟡 Urgent";
+          cssClass = "urgent";
+        } else {
+          level = "🔴 Critical";
+          cssClass = "critical";
+        }
+
+        responderDiv.innerText = "Recommended Responder: " + responders;
+        severityDiv.innerHTML = `Severity Level: <span class="${cssClass}">${level}</span> (Score: ${totalScore})`;
+
+        responderDiv.style.display = "block";
+        severityDiv.style.display = "block";
+      };
+      container.appendChild(submitBtn);
+    }
+  </script>
+</body>
+</html>
